@@ -14,27 +14,34 @@ class TodoListViewController: UITableViewController {
 
     var itemArray = [Item]()
     
-    let defaults = UserDefaults.standard
+    //let defaults = UserDefaults.standard
+    
+    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
+
     
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
+        
 
-        let newItem = Item()
-        newItem.title = "Find Mike"
-        itemArray.append(newItem)
+
+//        let newItem = Item()
+//        newItem.title = "Find Mike"
+//        itemArray.append(newItem)
+//        
+//        let newItem2 = Item()
+//        newItem2.title = "Buy Eggos"
+//        itemArray.append(newItem2)
+//        
+//        let newItem3 = Item()
+//        newItem3.title = "Destroy Demogorgon"
+//        itemArray.append(newItem3)
         
-        let newItem2 = Item()
-        newItem2.title = "Buy Eggos"
-        itemArray.append(newItem2)
+//        if let items = defaults.array(forKey: "TodoListArray") as? [Item]{
+//            itemArray = items
+//        }
         
-        let newItem3 = Item()
-        newItem3.title = "Destroy Demogorgon"
-        itemArray.append(newItem3)
-        
-        if let items = defaults.array(forKey: "TodoListArray") as? [Item]{
-            itemArray = items
-        }
+        loadItems()
     
     }
 
@@ -51,6 +58,7 @@ class TodoListViewController: UITableViewController {
 
         let item = itemArray[indexPath.row]
         cell.textLabel?.text = item.title
+        
         
         
         //check to see if it should be checked or not
@@ -72,6 +80,10 @@ class TodoListViewController: UITableViewController {
         
         //if it's true, make it false, if false make it true
         itemArray[indexPath.row].done = !itemArray[indexPath.row].done
+        //now want to save this to the plist we made
+        
+        
+        
         //force tableView to call its data source method again
         tableView.reloadData()
         
@@ -103,11 +115,12 @@ class TodoListViewController: UITableViewController {
             
             
             self.itemArray.append(newItem)
+            self.saveItems()
             
             //save the updated itemArray to user defaults with this new key
-            self.defaults.setValue(self.itemArray, forKey: "TodoListArray")
+            //self.defaults.setValue(self.itemArray, forKey: "TodoListArray")
             
-            // need to get the address of the simular and of the sandbox where our app lives
+                        // need to get the address of the simular and of the sandbox where our app lives
             self.tableView.reloadData()
         
         })
@@ -125,6 +138,29 @@ class TodoListViewController: UITableViewController {
     
     }
     
+    func saveItems(){
+        //encodes into a plist
+        let encoder = PropertyListEncoder()
+        do{
+            let data = try encoder.encode(itemArray)
+            //write data to our data file path
+            try data.write(to: dataFilePath!)
+        } catch{
+            print("Error encoding item array, \(error)")
+        }
+
+    }
+    
+    func loadItems(){
+        if let data = try? Data(contentsOf: dataFilePath!){
+            let decoder = PropertyListDecoder()
+            do {
+            itemArray = try decoder.decode([Item].self, from: data)
+            } catch{
+                print("Error decoding item array, \(error)")
+            }
+        }
+    }
 
 
 }
