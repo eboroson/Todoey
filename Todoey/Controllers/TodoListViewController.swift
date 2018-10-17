@@ -7,6 +7,8 @@
 //
 
 import UIKit
+import CoreData
+
 
 // because this is type UITableViewController - no need to set ourself as delegate, data source, etc
 class TodoListViewController: UITableViewController {
@@ -14,34 +16,31 @@ class TodoListViewController: UITableViewController {
 
     var itemArray = [Item]()
     
-    //let defaults = UserDefaults.standard
+    // this will be nil until we select it in the previous screen
+    var selectedCategory : Category? {
+        // will happen as soon as this value is set with a value
+        didSet{
+            loadItems()
+        }
+    }
     
-    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
+    
+    //let defaults = UserDefaults.standard
+   
+    // get singleton "shared" which corresponds to our curren live application object
+     let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
 
     
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
         
-
-
-//        let newItem = Item()
-//        newItem.title = "Find Mike"
-//        itemArray.append(newItem)
-//        
-//        let newItem2 = Item()
-//        newItem2.title = "Buy Eggos"
-//        itemArray.append(newItem2)
-//        
-//        let newItem3 = Item()
-//        newItem3.title = "Destroy Demogorgon"
-//        itemArray.append(newItem3)
+        print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
         
-//        if let items = defaults.array(forKey: "TodoListArray") as? [Item]{
-//            itemArray = items
-//        }
+        searchBar.delegate = self
         
-        loadItems()
+        //at the start we want to load ALL in the persistant container
+       // loadItems()
     
     }
 
@@ -80,8 +79,15 @@ class TodoListViewController: UITableViewController {
         
         //if it's true, make it false, if false make it true
         itemArray[indexPath.row].done = !itemArray[indexPath.row].done
-        //now want to save this to the plist we made
+     
+        // if we want to DELETE:
         
+//        //this would remove it from the context
+//        context.delete(itemArray[indexPath.row])
+//        //then we can  remove the item from the item array
+//        itemArray.remove(at: indexPath.row)
+
+        saveItems()
         
         
         //force tableView to call its data source method again
@@ -98,6 +104,7 @@ class TodoListViewController: UITableViewController {
 
     //MARK: - Add new items
     
+    @IBOutlet weak var searchBar: UISearchBar!
     @IBAction func addButtonPressed(_ sender: UIBarButtonItem) {
         
         var textField = UITextField()
@@ -109,18 +116,18 @@ class TodoListViewController: UITableViewController {
         let action = UIAlertAction(title: "Add Item", style: .default, handler: {
             (action) in
             //what will happen once the user clicks the add item button on the UI alert
-
-            let newItem = Item()
-            newItem.title = textField.text!
             
+            let newItem = Item(context: self.context)
+            newItem.title = textField.text!
+            newItem.done = false
+            newItem.parentCategory = self.selectedCategory
             
             self.itemArray.append(newItem)
             self.saveItems()
             
             //save the updated itemArray to user defaults with this new key
             //self.defaults.setValue(self.itemArray, forKey: "TodoListArray")
-            
-                        // need to get the address of the simular and of the sandbox where our app lives
+   // need to get the address of the simulator and of the sandbox where our app lives
             self.tableView.reloadData()
         
         })
@@ -139,29 +146,92 @@ class TodoListViewController: UITableViewController {
     }
     
     func saveItems(){
-        //encodes into a plist
-        let encoder = PropertyListEncoder()
+        // need to commit our context to permanent storage inside our persistent container
+        
+        
         do{
-            let data = try encoder.encode(itemArray)
-            //write data to our data file path
-            try data.write(to: dataFilePath!)
+            try context.save()
         } catch{
-            print("Error encoding item array, \(error)")
+            print("Error saving context \(error)")
         }
 
     }
     
-    func loadItems(){
-        if let data = try? Data(contentsOf: dataFilePath!){
-            let decoder = PropertyListDecoder()
-            do {
-            itemArray = try decoder.decode([Item].self, from: data)
-            } catch{
-                print("Error decoding item array, \(error)")
-            }
+    //"with" is the external parameter, "request" is whats used INTERNAL to the function
+    // DEFAULT value for the REQUEST is Item.fetchRequest (if we call this without a parameter)
+    //DEFAULT value for the myPREDICATE is nil -- meaning it might not have a value, which is why it's an optional
+    func loadItems(with myrequest: NSFetchRequest<Item> = Item.fetchRequest(), myPredicate: NSPredicate? = nil){
+
+        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
+        if let additionalPredicate = myPredicate {
+            // assuming it's not nil
+            myrequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate ])
+        } else {
+            // meaning the predicate parameter is nil
+            myrequest.predicate = categoryPredicate
         }
+        
+        
+        //need to specify that the data type of the output of our request will be an array of Items
+      //  let myrequest : NSFetchRequest<Item> = Item.fetchRequest()
+        do {
+        //fetch the myrequest request
+        itemArray = try context.fetch(myrequest)
+        } catch {
+            print("Error fetching data from context \(error)")
+        }
+        
+        tableView.reloadData()
     }
+    
 
 
 }
 
+
+//MARK: Search Bar Methods
+extension TodoListViewController: UISearchBarDelegate{
+    
+    //this is the search bar delegate method
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        //now want to reload table view using only items they searched for
+        let myrequest : NSFetchRequest<Item> = Item.fetchRequest()
+        
+        //what is our query?  use an NSPredicate
+        //replace %@ with the argument -- [cd] makes it case and diacritic INsensitive
+       let mypredicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
+        
+        
+        // we can sort the data we get back
+        myrequest.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+        // looks for an aRRAY of sort descriptors
+        
+        
+//        do {
+//            //fetch the myrequest request
+//            itemArray = try context.fetch(myrequest)
+//        } catch {
+//            print("Error fetching data from context \(error)")
+//        }
+        loadItems(with: myrequest, myPredicate: mypredicate )
+        
+        tableView.reloadData()
+    }
+    
+    
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        if searchBar.text?.count == 0 {
+            loadItems()
+            
+            // this manages all the threads/processing
+            // main thread is where you update your user interface elements
+            DispatchQueue.main.async {
+                //need to tell search bar to STOP being first responder in window (no longer currenlty selected)
+                searchBar.resignFirstResponder()
+            }
+            
+        
+        }
+    }
+
+}
