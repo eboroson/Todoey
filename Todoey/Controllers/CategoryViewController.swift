@@ -7,22 +7,22 @@
 //
 
 import UIKit
-import CoreData
+import RealmSwift
 
 
 class CategoryViewController: UITableViewController {
 
-    var categoryArray = [Category]()
+    // try! hints at possibly bad code... but in this case, it's okay
+    let realm = try! Realm()
     
-    // get singleton "shared" which corresponds to our curren live application object
-    // get our delegat's persisten container
+    //this is an AUTO-updated container type from Realm - returned from object queries
+    var categories: Results<Category>?
     
-    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
-    
+
+
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        //at the start we want to load ALL in the persistant container
         loadCategories()
 
     }
@@ -30,7 +30,8 @@ class CategoryViewController: UITableViewController {
     
     //MARK: - TableView Datasource Methods
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return categoryArray.count
+        //get count of categories ONLY IF categories is not null.  If it IS nil, then use 1 instead
+        return categories?.count ?? 1
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -38,7 +39,7 @@ class CategoryViewController: UITableViewController {
         // Create a cell using the reusable cell identifier we gave. Index path is that of the cell we are looking to populate.  Adds it to the table.
         let cell = tableView.dequeueReusableCell(withIdentifier: "CategoryCell", for: indexPath)
 
-        cell.textLabel?.text = categoryArray[indexPath.row].name
+        cell.textLabel?.text = categories?[indexPath.row].name ?? "No Categories Added Yet"
         
         return cell
     }
@@ -57,7 +58,7 @@ class CategoryViewController: UITableViewController {
         // this may be nil if nothing has been selected
         if let myIndexPath = tableView.indexPathForSelectedRow{
             // set a property in the destination VC
-            destinationVC.selectedCategory = categoryArray[myIndexPath.row]
+            destinationVC.selectedCategory = categories?[myIndexPath.row]
         }
     }
     
@@ -66,10 +67,12 @@ class CategoryViewController: UITableViewController {
     
     //MARK: - Data Manipulation Methods
     
-    func saveCategories(){
+    func save(category: Category){
         // need to commit our context to permanent storage inside our persistent container
         do{
-            try context.save()
+            try realm.write{
+                realm.add(category)
+            }
         } catch{
             print("Error saving category \(error)")
         }
@@ -90,11 +93,10 @@ class CategoryViewController: UITableViewController {
             (action) in
             //what will happen once the user clicks the 'add category' button on the UI alert
             
-            let newCategory = Category(context: self.context)
+            let newCategory = Category()
             newCategory.name = textField.text!
 
-            self.categoryArray.append(newCategory)
-            self.saveCategories()
+            self.save(category: newCategory)
             self.tableView.reloadData()
             
         })
@@ -126,16 +128,8 @@ class CategoryViewController: UITableViewController {
     // DEFAULT value for the REQUEST is Item.fetchRequest (if we call this without a parameter)
     func loadCategories(){
     
-    // th second half of this gets us backALL the category ns managed objects that were created using the CAtegory entity
-    let myrequest : NSFetchRequest<Category> = Category.fetchRequest()
-    
-        //need to specify that the data type of the output of our request will be an array of categories
-        do {
-            //fetch the myrequest request
-            categoryArray = try context.fetch(myrequest)
-        } catch {
-            print("Error loading categories \(error)")
-        }
+        //pulls all objects inside Realm of type Category
+        categories = realm.objects(Category.self)
         
         tableView.reloadData()
     }

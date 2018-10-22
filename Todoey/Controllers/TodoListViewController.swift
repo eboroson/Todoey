@@ -7,14 +7,16 @@
 //
 
 import UIKit
-import CoreData
+import RealmSwift
+
 
 
 // because this is type UITableViewController - no need to set ourself as delegate, data source, etc
 class TodoListViewController: UITableViewController {
     // default name given to the table view outlet is "tableView"
 
-    var itemArray = [Item]()
+    var todoItems : Results<Item>?
+    let realm = try! Realm()
     
     // this will be nil until we select it in the previous screen
     var selectedCategory : Category? {
@@ -23,12 +25,6 @@ class TodoListViewController: UITableViewController {
             loadItems()
         }
     }
-    
-    
-    //let defaults = UserDefaults.standard
-   
-    // get singleton "shared" which corresponds to our curren live application object
-     let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
 
     
     override func viewDidLoad() {
@@ -46,7 +42,8 @@ class TodoListViewController: UITableViewController {
 
     //MARK: - Tableview Datasource Methods
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return itemArray.count
+        //if todoitems is not null = return count, else 1
+        return todoItems?.count ?? 1
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -55,17 +52,21 @@ class TodoListViewController: UITableViewController {
         let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath)
         
 
-        let item = itemArray[indexPath.row]
-        cell.textLabel?.text = item.title
-        
-        
-        
-        //check to see if it should be checked or not
-        
-        //Ternary opeartor ==>
-        // value = condition ? valueIfTrue : valueIfFalse
-        
-        cell.accessoryType = item.done ? .checkmark : .none
+        if let item = todoItems?[indexPath.row]{
+            cell.textLabel?.text = item.title
+            
+            
+            //check to see if it should be checked or not
+            
+            //Ternary opeartor ==>
+            // value = condition ? valueIfTrue : valueIfFalse
+            
+            cell.accessoryType = item.done ? .checkmark : .none
+        } else {
+            //if we don't get a cell because there was no item
+            cell.textLabel?.text = "No Items Added"
+        }
+
 
         return cell
     }
@@ -74,30 +75,28 @@ class TodoListViewController: UITableViewController {
     
     //MARK: Tableview Delegate Methods
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        //grab the cell at the selected index path
-
+        //what to do when a cell is selected
         
-        //if it's true, make it false, if false make it true
-        itemArray[indexPath.row].done = !itemArray[indexPath.row].done
-     
-        // if we want to DELETE:
-        
-//        //this would remove it from the context
-//        context.delete(itemArray[indexPath.row])
-//        //then we can  remove the item from the item array
-//        itemArray.remove(at: indexPath.row)
-
-        saveItems()
-        
+        //get the item from the todoItems container at current selecdted row indexpath row
+        if let item = todoItems?[indexPath.row] {
+            //assuming it is not nil - then we can grab the item object
+            do {
+                try realm.write{
+                    //here is what we want to write:
+                    item.done = !item.done
+                    
+                    //if we want to DELETE:
+                   // realm.delete(item)
+                }
+            } catch {
+                print ("Error svaing done status, \(error)")
+            }
+        }
         
         //force tableView to call its data source method again
         tableView.reloadData()
         
-
-//            tableView.cellForRow(at: indexPath)?.accessoryType = UITableViewCellAccessoryType.none
-
-        
-        
+        //make it DE-selected immediately so it doesn't stay highlighted
         tableView.deselectRow(at: indexPath, animated: true)
     }
     
@@ -113,24 +112,25 @@ class TodoListViewController: UITableViewController {
      
         let alert = UIAlertController(title: "Add New Todoey Item", message: "", preferredStyle: .alert)
         
-        let action = UIAlertAction(title: "Add Item", style: .default, handler: {
+        let action = UIAlertAction(title: "Add Item", style: .default) {
             (action) in
             //what will happen once the user clicks the add item button on the UI alert
             
-            let newItem = Item(context: self.context)
-            newItem.title = textField.text!
-            newItem.done = false
-            newItem.parentCategory = self.selectedCategory
-            
-            self.itemArray.append(newItem)
-            self.saveItems()
-            
-            //save the updated itemArray to user defaults with this new key
-            //self.defaults.setValue(self.itemArray, forKey: "TodoListArray")
-   // need to get the address of the simulator and of the sandbox where our app lives
+            if let currentCategory = self.selectedCategory{
+                do{
+                    try self.realm.write{
+                        let newItem = Item()
+                        newItem.title = textField.text!
+                        currentCategory.items.append(newItem)
+                    }
+                } catch{
+                    print("Error saving Item \(error)")
+                }
+            }
+
             self.tableView.reloadData()
         
-        })
+        }
         
         // the closure in the below happens after the text field is ADDED to the alert
         alert.addTextField { (alertTextField) in
@@ -145,45 +145,21 @@ class TodoListViewController: UITableViewController {
     
     }
     
-    func saveItems(){
-        // need to commit our context to permanent storage inside our persistent container
-        
-        
-        do{
-            try context.save()
-        } catch{
-            print("Error saving context \(error)")
-        }
-
-    }
+  
+    
     
     //"with" is the external parameter, "request" is whats used INTERNAL to the function
     // DEFAULT value for the REQUEST is Item.fetchRequest (if we call this without a parameter)
     //DEFAULT value for the myPREDICATE is nil -- meaning it might not have a value, which is why it's an optional
-    func loadItems(with myrequest: NSFetchRequest<Item> = Item.fetchRequest(), myPredicate: NSPredicate? = nil){
+    func loadItems(){
 
-        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
-        if let additionalPredicate = myPredicate {
-            // assuming it's not nil
-            myrequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate ])
-        } else {
-            // meaning the predicate parameter is nil
-            myrequest.predicate = categoryPredicate
-        }
-        
-        
-        //need to specify that the data type of the output of our request will be an array of Items
-      //  let myrequest : NSFetchRequest<Item> = Item.fetchRequest()
-        do {
-        //fetch the myrequest request
-        itemArray = try context.fetch(myrequest)
-        } catch {
-            print("Error fetching data from context \(error)")
-        }
-        
+        // all items belonging to current selected category,sorted by title
+        todoItems = selectedCategory?.items.sorted(byKeyPath: "title", ascending: true)
+
+
         tableView.reloadData()
     }
-    
+
 
 
 }
@@ -194,34 +170,34 @@ extension TodoListViewController: UISearchBarDelegate{
     
     //this is the search bar delegate method
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-        //now want to reload table view using only items they searched for
-        let myrequest : NSFetchRequest<Item> = Item.fetchRequest()
-        
-        //what is our query?  use an NSPredicate
-        //replace %@ with the argument -- [cd] makes it case and diacritic INsensitive
-       let mypredicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
-        
-        
-        // we can sort the data we get back
-        myrequest.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
-        // looks for an aRRAY of sort descriptors
-        
-        
-//        do {
-//            //fetch the myrequest request
-//            itemArray = try context.fetch(myrequest)
-//        } catch {
-//            print("Error fetching data from context \(error)")
-//        }
-        loadItems(with: myrequest, myPredicate: mypredicate )
-        
+//        //now want to reload table view using only items they searched for
+//        let myrequest : NSFetchRequest<Item> = Item.fetchRequest()
+//
+//        //what is our query?  use an NSPredicate
+//        //replace %@ with the argument -- [cd] makes it case and diacritic INsensitive
+//       let mypredicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
+//
+//
+//        // we can sort the data we get back
+//        myrequest.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+//        // looks for an aRRAY of sort descriptors
+//
+//
+////        do {
+////            //fetch the myrequest request
+////            itemArray = try context.fetch(myrequest)
+////        } catch {
+////            print("Error fetching data from context \(error)")
+////        }
+//        loadItems(with: myrequest, myPredicate: mypredicate )
+//
         tableView.reloadData()
     }
     
     
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
         if searchBar.text?.count == 0 {
-            loadItems()
+//            loadItems()
             
             // this manages all the threads/processing
             // main thread is where you update your user interface elements
