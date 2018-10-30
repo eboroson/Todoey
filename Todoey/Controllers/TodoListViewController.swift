@@ -170,34 +170,18 @@ extension TodoListViewController: UISearchBarDelegate{
     
     //this is the search bar delegate method
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-//        //now want to reload table view using only items they searched for
-//        let myrequest : NSFetchRequest<Item> = Item.fetchRequest()
-//
-//        //what is our query?  use an NSPredicate
-//        //replace %@ with the argument -- [cd] makes it case and diacritic INsensitive
-//       let mypredicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
-//
-//
-//        // we can sort the data we get back
-//        myrequest.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
-//        // looks for an aRRAY of sort descriptors
-//
-//
-////        do {
-////            //fetch the myrequest request
-////            itemArray = try context.fetch(myrequest)
-////        } catch {
-////            print("Error fetching data from context \(error)")
-////        }
-//        loadItems(with: myrequest, myPredicate: mypredicate )
-//
-        tableView.reloadData()
+        //now want to reload table view using only items they searched for
+
+        //title contains case and diacritic insensotive, based on argument, sorted by  --
+        todoItems = todoItems?.filter("title CONTAINS[cd] %@", searchBar.text!).sorted(byKeyPath: "dateCreated", ascending: true)
+
+     tableView.reloadData()
     }
     
     
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
         if searchBar.text?.count == 0 {
-//            loadItems()
+       loadItems()
             
             // this manages all the threads/processing
             // main thread is where you update your user interface elements
